@@ -1,114 +1,145 @@
-const StructurizrAnalytics = () => {
-    return (
-      <div className="space-y-6">
-        {/* Workspaces chart */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-medium text-gray-900">Structurizr Workspaces</h2>
-            <div className="flex items-center">
-              <button className="text-sm font-medium text-primary-500 bg-primary-50 px-3 py-1 rounded-md">
-                This month
-              </button>
-            </div>
-          </div>
-          
-          {/* Chart placeholder */}
-          <div className="h-64 flex items-center justify-center border border-dashed border-gray-300 rounded-md bg-gray-50">
-            <p className="text-gray-500">Chart: Workspaces over time</p>
-          </div>
-          
-          {/* Legend */}
-          <div className="flex mt-4">
-            <div className="flex items-center mr-4">
-              <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-              <span className="text-sm text-gray-600">Active</span>
-            </div>
-            <div className="flex items-center mr-4">
-              <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
-              <span className="text-sm text-gray-600">Created</span>
-            </div>
-            <div className="flex items-center">
-              <div className="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
-              <span className="text-sm text-gray-600">Deleted</span>
-            </div>
+// src/pages/StructurizrAnalytics.tsx
+
+import React, { useState } from 'react';
+import { api } from '../utils/api';
+import StatsCard from '../components/dashboard/StatsCard';
+import WorkspaceChart from '../components/dashboard/WorkspaceChart';
+
+const StructurizrAnalytics: React.FC = () => {
+  const [timeframe, setTimeframe] = useState('month');
+  
+  // Fetch stats data
+  const { data: statsData, isLoading: isLoadingStats } = api.workspace.getStats.useQuery({
+    timeRange: timeframe
+  });
+  
+  // Fetch total count
+  const { data: totalCount, isLoading: isLoadingTotal } = api.workspace.getTotalCount.useQuery();
+  
+  // Fetch recent workspaces
+  const { data: recentWorkspaces, isLoading: isLoadingRecent } = api.workspace.getRecentWorkspaces.useQuery({
+    limit: 5
+  });
+  
+  // Stats items for StatsCard component
+  const statsItems = [
+    {
+      title: "Active Workspaces",
+      value: isLoadingTotal ? "Loading..." : totalCount || 0,
+      trend: { value: 8.3, isPositive: true }
+    },
+    {
+      title: "Created This Month",
+      value: isLoadingStats ? "Loading..." : statsData?.reduce((sum, item) => sum + item.count, 0) || 0,
+      trend: { value: 10.0, isPositive: true }
+    },
+    {
+      title: "Average Daily Creation",
+      value: isLoadingStats ? "Loading..." : Math.round(
+        (statsData?.reduce((sum, item) => sum + item.count, 0) || 0) / 
+        (statsData?.length || 1)
+      ),
+      trend: { value: 3.2, isPositive: true }
+    }
+  ];
+  
+  return (
+    <div className="space-y-6">
+      {/* Page Header with filters will be added by the Layout component */}
+      
+      {/* Stats card */}
+      <StatsCard items={statsItems} />
+      
+      {/* Workspaces Chart */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-medium text-gray-900">Workspace Creation Over Time</h2>
+          <div className="flex items-center">
+            <select
+              className="ml-2 block border-gray-300 rounded-md shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+              value={timeframe}
+              onChange={(e) => setTimeframe(e.target.value)}
+            >
+              <option value="day">Last 24 Hours</option>
+              <option value="week">Last 7 Days</option>
+              <option value="month">Last 30 Days</option>
+              <option value="quarter">Last 90 Days</option>
+              <option value="year">Last 12 Months</option>
+              <option value="all-time">All Time</option>
+            </select>
           </div>
         </div>
         
-        {/* Access methods and Top users */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Access methods chart */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-medium text-gray-900 mb-6">How workspaces are being accessed</h2>
-            
-            {/* Chart placeholder */}
-            <div className="h-48 flex items-center justify-center border border-dashed border-gray-300 rounded-md bg-gray-50 mb-4">
-              <p className="text-gray-500">Chart: Access methods distribution</p>
-            </div>
-            
-            {/* Access methods table */}
+        {isLoadingStats ? (
+          <div className="h-64 flex items-center justify-center">
+            <p className="text-gray-500">Loading chart data...</p>
+          </div>
+        ) : !statsData || statsData.length === 0 ? (
+          <div className="h-64 flex items-center justify-center">
+            <p className="text-gray-500">No data available for the selected time period</p>
+          </div>
+        ) : (
+          <WorkspaceChart data={statsData} />
+        )}
+      </div>
+      
+      {/* Recent Workspaces Table */}
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+          <h2 className="text-lg font-medium text-gray-900">Recently Created Workspaces</h2>
+        </div>
+        
+        {isLoadingRecent ? (
+          <div className="py-4 text-center">
+            <p className="text-gray-500">Loading recent workspaces...</p>
+          </div>
+        ) : !recentWorkspaces || recentWorkspaces.length === 0 ? (
+          <div className="py-4 text-center">
+            <p className="text-gray-500">No recent workspaces</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    PAGE NAME
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Workspace ID
                   </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    TOTAL USERS
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Name
                   </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    RATE
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Owner
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Created Date
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                <tr>
-                  <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900 flex items-center">
-                    <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
-                    API
-                  </td>
-                  <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">350</td>
-                  <td className="px-4 py-2 whitespace-nowrap text-sm text-green-500">1.94%</td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900 flex items-center">
-                    <div className="w-3 h-3 bg-orange-500 rounded-full mr-2"></div>
-                    CLI
-                  </td>
-                  <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">100</td>
-                  <td className="px-4 py-2 whitespace-nowrap text-sm text-green-500">0.94%</td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900 flex items-center">
-                    <div className="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
-                    Mix of both
-                  </td>
-                  <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">500</td>
-                  <td className="px-4 py-2 whitespace-nowrap text-sm text-green-500">8.94%</td>
-                </tr>
+                {recentWorkspaces.map(workspace => (
+                  <tr key={workspace._id?.toString()}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {workspace.workspaceId}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {workspace.name}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {workspace.owner}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(workspace.createdAt).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
-          
-          {/* Top users chart */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-medium text-gray-900">TOP USERS</h2>
-              <span className="text-green-500 flex items-center text-sm">
-                <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clipRule="evenodd" />
-                </svg>
-                3.5% Increase
-              </span>
-            </div>
-            
-            {/* Chart placeholder */}
-            <div className="h-64 flex items-center justify-center border border-dashed border-gray-300 rounded-md bg-gray-50">
-              <p className="text-gray-500">Chart: Top users bar chart</p>
-            </div>
-          </div>
-        </div>
+        )}
       </div>
-    );
-  };
-  
-  export default StructurizrAnalytics;
+    </div>
+  );
+};
+
+export default StructurizrAnalytics;
