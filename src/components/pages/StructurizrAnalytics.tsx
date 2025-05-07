@@ -142,4 +142,98 @@ const StructurizrAnalytics: React.FC = () => {
   );
 };
 
+
+
+export default StructurizrAnalytics;
+
+
+// src/pages/StructurizrAnalytics.tsx (relevant part)
+
+import { useState } from 'react';
+import StatsCard from '../components/dashboard/StatsCard';
+import { api } from '../utils/api';
+
+const StructurizrAnalytics = () => {
+  const [timeframe, setTimeframe] = useState('month');
+  
+  // Fetch analytics data
+  const { data: analyticsData, isLoading: isLoadingAnalytics } = 
+    api.workspace.getAnalytics.useQuery({
+      timeRange: timeframe as any,
+    });
+  
+  // Fetch workspace counts
+  const { data: workspaceCount, isLoading: isLoadingCount } = 
+    api.workspace.getWorkspaceCount.useQuery();
+  
+  const { data: activeWorkspaces, isLoading: isLoadingActive } = 
+    api.workspace.getActiveWorkspaces.useQuery({
+      days: 30
+    });
+  
+  // Calculate total created in the selected period
+  const createdCount = analyticsData?.reduce((sum, item) => sum + item.count, 0) || 0;
+  
+  // Stats for StatsCard
+  const statsItems = [
+    {
+      title: "Total Workspaces",
+      value: isLoadingCount ? "Loading..." : workspaceCount || 0,
+      trend: { value: 8.3, isPositive: true }
+    },
+    {
+      title: "Active Workspaces",
+      value: isLoadingActive ? "Loading..." : activeWorkspaces || 0,
+      trend: { value: 3.0, isPositive: false }
+    },
+    {
+      title: "Created (Selected Period)",
+      value: isLoadingAnalytics ? "Loading..." : createdCount,
+      trend: { value: 10.0, isPositive: true }
+    }
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Stats Card with MongoDB data integrated */}
+      <StatsCard items={statsItems} />
+      
+      {/* Chart Control */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-medium text-gray-900">Workspace Creation Over Time</h2>
+          <select
+            className="border-gray-300 rounded-md"
+            value={timeframe}
+            onChange={(e) => setTimeframe(e.target.value)}
+          >
+            <option value="day">Last 24 Hours</option>
+            <option value="week">Last 7 Days</option>
+            <option value="month">Last 30 Days</option>
+            <option value="quarter">Last 90 Days</option>
+            <option value="year">Last 12 Months</option>
+            <option value="all-time">All Time</option>
+          </select>
+        </div>
+        
+        {/* Chart Placeholder (replace with your chart component) */}
+        {isLoadingAnalytics ? (
+          <div className="h-64 flex items-center justify-center">
+            <p>Loading chart data...</p>
+          </div>
+        ) : !analyticsData || analyticsData.length === 0 ? (
+          <div className="h-64 flex items-center justify-center">
+            <p>No data for the selected period</p>
+          </div>
+        ) : (
+          <div className="h-64">
+            {/* Replace with your chart component using analyticsData */}
+            <pre>{JSON.stringify(analyticsData, null, 2)}</pre>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export default StructurizrAnalytics;

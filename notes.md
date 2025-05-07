@@ -22,11 +22,39 @@ ea-analytics/
 │   │   └── api.ts                   # API utility
 │   ├── ...
 └── ...
-
+ea-analytics/
+├── .env.local                     # MongoDB connection information
+├── src/
+│   ├── components/
+│   │   ├── dashboard/
+│   │   │   ├── StatsCard.tsx      # Your existing StatsCard component
+│   │   │   └── ...                # Other dashboard components
+│   ├── pages/
+│   │   ├── api/
+│   │   │   └── trpc/
+│   │   │       └── [trpc].ts      # tRPC API handler
+│   │   ├── Overview.tsx           # Overview page with MongoDB data
+│   │   ├── StructurizrAnalytics.tsx # Structurizr page with MongoDB data
+│   │   └── ...
+│   ├── server/
+│   │   ├── api/
+│   │   │   ├── routers/
+│   │   │   │   └── workspace.ts   # Workspace API endpoints
+│   │   │   ├── root.ts            # Root router
+│   │   │   └── trpc.ts            # tRPC setup
+│   │   └── database.ts            # MongoDB connection and queries
+│   └── utils/
+│       └── api.ts                 # tRPC client setup
+└── ...
 
 .env.local
 
 MONGODB_URI=mongodb+srv://your-username:your-password@your-cluster.mongodb.net/your-database?retryWrites=true&w=majority
+
+
+# MongoDB Connection
+MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/?retryWrites=true&w=majority
+MONGODB_DB_NAME=ea_analytics
 
 I'm happy to explain the MongoDB connection approach and clarify the environment file setup!
 

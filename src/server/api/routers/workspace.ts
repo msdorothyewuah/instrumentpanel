@@ -1,44 +1,53 @@
 // src/server/api/routers/workspace.ts
 
-import { createRouter } from '../context';
 import { z } from 'zod';
-import { 
-  getWorkspaces, 
-  getWorkspaceStats, 
-  getTotalCount, 
-  getRecentWorkspaces, 
-  getActiveWorkspaces 
-} from '../../db/models/workspace';
+import { createTRPCRouter, publicProcedure } from '../trpc';
+import WorkspaceDatabase from '../../database';
 
-export const workspaceRouter = createRouter()
-  .query('getAll', {
-    async resolve() {
-      return await getWorkspaces();
-    }
-  })
-  .query('getActive', {
-    async resolve() {
-      return await getActiveWorkspaces();
-    }
-  })
-  .query('getStats', {
-    input: z.object({
-      timeRange: z.enum(['day', 'week', 'month', 'quarter', 'year', 'all-time'])
+export const workspaceRouter = createTRPCRouter({
+  getAllWorkspaces: publicProcedure
+    .query(async () => {
+      const db = await WorkspaceDatabase.connect();
+      try {
+        return await db.getAllWorkspaces();
+      } finally {
+        await db.close();
+      }
     }),
-    async resolve({ input }) {
-      return await getWorkspaceStats(input.timeRange);
-    }
-  })
-  .query('getTotalCount', {
-    async resolve() {
-      return await getTotalCount();
-    }
-  })
-  .query('getRecentWorkspaces', {
-    input: z.object({
-      limit: z.number().default(5)
-    }).optional(),
-    async resolve({ input }) {
-      return await getRecentWorkspaces(input?.limit);
-    }
-  });
+
+  getAnalytics: publicProcedure
+    .input(z.object({
+      timeRange: z.enum(['day', 'week', 'month', 'quarter', 'year', 'all-time']),
+    }))
+    .query(async ({ input }) => {
+      const db = await WorkspaceDatabase.connect();
+      try {
+        return await db.getWorkspaceAnalytics(input.timeRange);
+      } finally {
+        await db.close();
+      }
+    }),
+    
+  getWorkspaceCount: publicProcedure
+    .query(async () => {
+      const db = await WorkspaceDatabase.connect();
+      try {
+        return await db.getWorkspaceCount();
+      } finally {
+        await db.close();
+      }
+    }),
+
+  getActiveWorkspaces: publicProcedure
+    .input(z.object({
+      days: z.number().default(30),
+    }).optional())
+    .query(async ({ input }) => {
+      const db = await WorkspaceDatabase.connect();
+      try {
+        return await db.getActiveWorkspaces(input?.days);
+      } finally {
+        await db.close();
+      }
+    }),
+});
