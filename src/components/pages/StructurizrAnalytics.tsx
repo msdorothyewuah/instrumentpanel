@@ -1,9 +1,9 @@
-// src/pages/StructurizrAnalytics.tsx
+// src/components/pages/StructurizrAnalytics.tsx
 
 import React, { useState } from 'react';
-import { api } from '../utils/api';
-import StatsCard from '../components/dashboard/StatsCard';
-import WorkspaceChart from '../components/dashboard/WorkspaceChart';
+import { api } from '../../utils/api';
+import StatsCard from '../dashboard/StatsCard';
+import WorkspaceChart from '../dashboard/WorkspaceChart';
 
 const StructurizrAnalytics: React.FC = () => {
   const [timeframe, setTimeframe] = useState('month');
@@ -16,9 +16,9 @@ const StructurizrAnalytics: React.FC = () => {
   // Fetch total count
   const { data: totalCount, isLoading: isLoadingTotal } = api.workspace.getTotalCount.useQuery();
   
-  // Fetch recent workspaces
-  const { data: recentWorkspaces, isLoading: isLoadingRecent } = api.workspace.getRecentWorkspaces.useQuery({
-    limit: 5
+  // Fetch active workspaces - This should return an array of workspace objects
+  const { data: activeWorkspaces, isLoading: isLoadingActive } = api.workspace.getActiveWorkspaces.useQuery({
+    days: 30
   });
   
   // Stats items for StatsCard component
@@ -89,13 +89,13 @@ const StructurizrAnalytics: React.FC = () => {
           <h2 className="text-lg font-medium text-gray-900">Recently Created Workspaces</h2>
         </div>
         
-        {isLoadingRecent ? (
+        {isLoadingActive ? (
           <div className="py-4 text-center">
-            <p className="text-gray-500">Loading recent workspaces...</p>
+            <p className="text-gray-500">Loading active workspaces...</p>
           </div>
-        ) : !recentWorkspaces || recentWorkspaces.length === 0 ? (
+        ) : !activeWorkspaces || !Array.isArray(activeWorkspaces) || activeWorkspaces.length === 0 ? (
           <div className="py-4 text-center">
-            <p className="text-gray-500">No recent workspaces</p>
+            <p className="text-gray-500">No active workspaces</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -117,7 +117,7 @@ const StructurizrAnalytics: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {recentWorkspaces.map(workspace => (
+                {Array.isArray(activeWorkspaces) && activeWorkspaces.map((workspace) => (
                   <tr key={workspace._id?.toString()}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {workspace.workspaceId}
@@ -142,7 +142,4 @@ const StructurizrAnalytics: React.FC = () => {
   );
 };
 
-
-
 export default StructurizrAnalytics;
-

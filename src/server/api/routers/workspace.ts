@@ -1,53 +1,123 @@
-// src/server/api/routers/workspace.ts
+// src/server/database.ts
 
-import { z } from 'zod';
-import { createTRPCRouter, publicProcedure } from '../trpc';
-import WorkspaceDatabase from '../../database';
+import { MongoClient, Collection, Db, ObjectId } from "mongodb";
 
-export const workspaceRouter = createTRPCRouter({
-  getAllWorkspaces: publicProcedure
-    .query(async () => {
-      const db = await WorkspaceDatabase.connect();
-      try {
-        return await db.getAllWorkspaces();
-      } finally {
-        await db.close();
-      }
-    }),
+export type TimeRange = 'day' | 'week' | 'month' | 'quarter' | 'year' | 'all-time';
 
-  getAnalytics: publicProcedure
-    .input(z.object({
-      timeRange: z.enum(['day', 'week', 'month', 'quarter', 'year', 'all-time']),
-    }))
-    .query(async ({ input }) => {
-      const db = await WorkspaceDatabase.connect();
-      try {
-        return await db.getWorkspaceAnalytics(input.timeRange);
-      } finally {
-        await db.close();
-      }
-    }),
+export interface Workspace {
+  _id?: ObjectId;
+  workspaceId: number;
+  name: string;
+  owner: string;
+  createdAt: Date;
+  lastUpdated?: Date;
+  active: boolean;
+}
+
+interface AnalyticsDataPoint {
+  date: string;
+  count: number;
+}
+
+class WorkspaceDatabase {
+  private client: MongoClient;
+  private workspaces: Collection;
+
+  private constructor(client: MongoClient, workspaces: Collection) {
+    this.client = client;
+    this.workspaces = workspaces;
+  }
+
+  static connect = async (): Promise<WorkspaceDatabase> => {
+    const uri = process.env.MONGODB_URI;
+    const dbName = process.env.MONGODB_DB_NAME;
     
-  getWorkspaceCount: publicProcedure
-    .query(async () => {
-      const db = await WorkspaceDatabase.connect();
-      try {
-        return await db.getWorkspaceCount();
-      } finally {
-        await db.close();
-      }
-    }),
+    if (!uri) throw new Error("MONGODB_URI is not defined");
+    if (!dbName) throw new Error("MONGODB_DB_NAME is not defined");
+    
+    const client = new MongoClient(uri);
+    await client.connect();
+    const db: Db = client.db(dbName);
+    return new WorkspaceDatabase(client, db.collection("workspaces"));
+  };
 
-  getActiveWorkspaces: publicProcedure
-    .input(z.object({
-      days: z.number().default(30),
-    }).optional())
-    .query(async ({ input }) => {
-      const db = await WorkspaceDatabase.connect();
-      try {
-        return await db.getActiveWorkspaces(input?.days);
-      } finally {
-        await db.close();
-      }
-    }),
-});
+  getAllWorkspaces = async () => {
+    const result = await this.workspaces.find({
+      active: true
+    }).toArray();
+    console.log('Database getAllWorkspaces result:', result.length);
+    return result;
+  };
+
+  getWorkspaceAnalytics = async (timeRange: TimeRange): Promise<AnalyticsDataPoint[]> => {
+    const dateFilter = new Date();
+    
+    switch (timeRange) {
+      case "day":
+        dateFilter.setDate(dateFilter.getDate() - 1);
+        break;
+      case "week":
+        dateFilter.setDate(dateFilter.getDate() - 7);
+        break;
+      case "month":
+        dateFilter.setMonth(dateFilter.getMonth() - 1);
+        break;
+      case "quarter":
+        dateFilter.setMonth(dateFilter.getMonth() - 3); // Fixed typo: dateRange -> dateFilter
+        break;
+      case "year":
+        dateFilter.setFullYear(dateFilter.getFullYear() - 1);
+        break;
+      case "all-time":
+        dateFilter.setFullYear(2000); // Effectively no limit
+        break;
+    }
+
+    const result = await this.workspaces.aggregate([
+      { 
+        $match: { 
+          createdAt: { $gte: dateFilter },
+          active: true 
+        } 
+      },
+      {
+        $group: {
+          _id: {
+            year: { $year: "$createdAt" },
+            month: { $month: "$createdAt" },
+            day: { $dayOfMonth: "$createdAt" }
+          },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 } }
+    ]).toArray();
+
+    return result.map(({ _id, count }) => ({
+      date: `${_id.year}-${String(_id.month).padStart(2, "0")}-${String(_id.day).padStart(2, "0")}`,
+      count
+    }));
+  };
+
+  getWorkspaceCount = async () => {
+    return await this.workspaces.countDocuments({ active: true });
+  };
+
+  // Modified to return an array of active workspaces instead of just a count
+  getActiveWorkspaces = async (days = 30) => {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    
+    // Return array of workspace documents instead of just the count
+    return await this.workspaces.find({
+      lastUpdated: { $gte: cutoff },
+      active: true
+    }).toArray();
+  };
+
+  close = async () => {
+    await this.client.close();
+  };
+}
+
+export default WorkspaceDatabase;
