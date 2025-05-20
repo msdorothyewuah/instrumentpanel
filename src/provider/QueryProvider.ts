@@ -1,5 +1,7 @@
+// src/provider/QueryProvider.tsx
 import React from 'react';
-import { QueryClientProvider, ReactQueryDevtools } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { queryClient } from '../lib/queryClient';
 
 interface QueryProviderProps {
@@ -7,7 +9,7 @@ interface QueryProviderProps {
 }
 
 // QueryProvider component to wrap the app with React Query
-const QueryProvider = ({ children }: QueryProviderProps): JSX.Element => {
+const QueryProvider = ({ children }: QueryProviderProps) => {
   return (
     <QueryClientProvider client={queryClient}>
       {children}
