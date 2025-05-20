@@ -52,6 +52,11 @@ ea-analytics/
 MONGODB_URI=mongodb+srv://your-username:your-password@your-cluster.mongodb.net/your-database?retryWrites=true&w=majority
 
 
+npm install @tanstack/react-query @tanstack/react-query-devtools axios
+# or using yarn
+yarn add @tanstack/react-query @tanstack/react-query-devtools axios
+
+
 # MongoDB Connection
 MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/?retryWrites=true&w=majority
 MONGODB_DB_NAME=ea_analytics
@@ -113,3 +118,127 @@ MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/database?retryWr
 When deploying to production, you would configure these same environment variables in your hosting platform (like Vercel, Netlify, etc.) rather than deploying the `.env.local` file.
 
 Would you like me to elaborate further on any specific aspect of the MongoDB connection approach or environment setup?
+
+# React Query Integration Guide
+
+This guide explains how to integrate React Query for data fetching in your dashboard application.
+
+## Files Structure
+
+- `App.tsx` - Main application component with routing and theme setup
+- `QueryProvider.tsx` - React Query provider setup
+- `queryClient.ts` - React Query client configuration
+- `types.ts` - TypeScript interfaces and types for your data
+- `api.ts` - API service functions using Axios
+- `useAnalyticsQueries.ts` - Custom React Query hooks for data fetching
+
+### Components:
+- `Overview.tsx` - Main dashboard showing both Structurizr and C4 analytics
+- `StructurizrAnalytics.tsx` - Dedicated page for Structurizr analytics
+- `StatsCard.tsx` - Reusable component for displaying statistics
+- `WorkspaceChart.tsx` - Reusable chart component
+- `WorkspaceTable.tsx` - Reusable table component for workspaces
+
+## Setup Instructions
+
+### 1. Install Required Packages
+
+```bash
+npm install @tanstack/react-query @tanstack/react-query-devtools axios recharts
+# or if using yarn
+yarn add @tanstack/react-query @tanstack/react-query-devtools axios recharts
+```
+
+### 2. Create Environment Variables
+
+Create a `.env` file in your project root:
+
+```
+REACT_APP_API_URL=http://your-api-url.com/api
+```
+
+### 3. Implementation Steps
+
+1. Copy all the provided files to your project
+2. Ensure the file structure matches your existing project
+3. Update your `index.tsx` to use the new `App.tsx`
+4. Adjust API endpoints in `api.ts` if needed to match your backend
+
+## How React Query Benefits Your Dashboard
+
+React Query provides several key benefits for your dashboard application:
+
+### 1. Automatic Data Refreshing
+- Background data refresh every minute with `refetchInterval`
+- Refresh when the browser tab regains focus with `refetchOnWindowFocus`
+- Clear loading states for initial loads vs. background updates
+
+### 2. Improved User Experience
+- Keeps showing previous data while loading new data with `keepPreviousData`
+- Shows loading indicators only when necessary
+- Optimistic UI updates
+
+### 3. Performance Optimization
+- Caching of results to prevent redundant network requests
+- Data deduplication when multiple components request the same data
+- Configurable stale times to control refetching behavior
+
+### 4. Developer Experience
+- Cleaner code separation with custom hooks
+- TypeScript integration for type safety
+- DevTools for debugging cache and requests
+
+## Customization Options
+
+### Adjusting Refetch Intervals
+
+To modify how often data refreshes automatically, adjust the `refetchInterval` values in `useAnalyticsQueries.ts`. For example:
+
+```typescript
+// Change from 60 seconds to 2 minutes
+refetchInterval: 120 * 1000,
+```
+
+### Modifying Stale Time
+
+To change how long data is considered fresh before triggering a background refetch, modify the `staleTime` in `queryClient.ts`:
+
+```typescript
+staleTime: 60 * 1000, // Change from 30 seconds to 1 minute
+```
+
+### Adding New Query Hooks
+
+1. Add new API methods to `api.ts`
+2. Create corresponding query hooks in `useAnalyticsQueries.ts`
+3. Use these hooks in your components
+
+## Troubleshooting
+
+### Common Issues
+
+1. **"No QueryClient set, use QueryClientProvider to set one"**
+   - Ensure your app is wrapped with `<QueryProvider>` component
+
+2. **Stale data persisting too long**
+   - Decrease the `staleTime` in `queryClient.ts`
+   - Use `queryClient.invalidateQueries()` to force refetch
+
+3. **Too many requests being made**
+   - Increase the `staleTime` or `gcTime`
+   - Use the React Query DevTools to monitor requests
+
+4. **Type errors in query results**
+   - Ensure your API response types match your TypeScript interfaces
+
+## Using React Query DevTools
+
+React Query includes a powerful DevTools component that helps with debugging. It's already set up in `QueryProvider.tsx` and will appear in the bottom-right corner in development mode.
+
+The DevTools show:
+- Active and inactive queries
+- Query statuses and data
+- Last updated timestamps
+- Cache information
+
+This is invaluable for debugging and understanding how your data is being fetched and cached.
