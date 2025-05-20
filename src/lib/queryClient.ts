@@ -1,4 +1,4 @@
-// src/queryClient.ts
+// src/lib/queryClient.ts
 import { QueryClient } from '@tanstack/react-query';
 
 // Create a global query client instance
