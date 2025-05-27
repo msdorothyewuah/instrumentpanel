@@ -1,3 +1,9 @@
+npm install express mongodb dotenv cors
+npm install -D typescript @types/express @types/node @types/cors ts-node-dev # For TypeScript development
+
+
+
+
 ea-analytics/
 ├── src/
 │   ├── server/

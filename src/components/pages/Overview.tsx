@@ -1,301 +1,178 @@
-// src/components/Overview.tsx
-import React, { useState } from 'react';
-import { 
-  Container, 
-  Grid, 
-  Box, 
-  Typography, 
-  Paper, 
-  Tabs, 
-  Tab, 
-  FormControl, 
-  InputLabel, 
-  Select, 
-  MenuItem, 
-  Alert, 
-  SelectChangeEvent 
-} from '@mui/material';
-import { TimeRange } from '../types';
-import { 
-  useStructurizrDashboardData, 
-  useC4DashboardData 
-} from '../useAnalyticsQueries';
-import { StatsCard } from './StatsCard';
-import { WorkspaceChart } from './WorkspaceChart';
-import { WorkspaceTable } from './WorkspaceTable';
+// src/pages/Overview.tsx
+import React, { useEffect } from 'react'; // Added useEffect for logging
+import StatsCard from '../components/dashboard/StatsCard'; // Adjust path
+import {
+  useGetOverviewStats,
+  useGetOverviewC4TSChartData,
+  useGetOverviewStructurizrChartData,
+  useGetOverviewTopUsersTable,
+} from '../hooks/overviewQueries'; // Adjust path
+import { FilterParams } from '../services/apiService'; // Adjust path
 
-// Tab panel component
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
+// Placeholder components for charts and tables
+// You will replace these with your actual charting/table components
+const C4TSChartPlaceholder: React.FC<{ data: any[] }> = ({ data }) => (
+  <div className="h-64 border border-dashed border-gray-300 rounded-md bg-gray-50 flex items-center justify-center">
+    <p className="text-gray-500">C4TS Chart (Data points: {data?.length || 0})</p>
+  </div>
+);
+
+const StructurizrChartPlaceholder: React.FC<{ data: any[] }> = ({ data }) => (
+  <div className="h-64 border border-dashed border-gray-300 rounded-md bg-gray-50 flex items-center justify-center">
+    <p className="text-gray-500">Structurizr Chart (Data points: {data?.length || 0})</p>
+  </div>
+);
+
+const UsersTablePlaceholder: React.FC<{ data: any[] }> = ({ data }) => (
+  <div className="overflow-x-auto">
+    <table className="min-w-full divide-y divide-gray-200">
+      <thead className="bg-gray-50">
+        <tr>
+          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">USER</th>
+          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DEPARTMENT</th>
+          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">C4TS API HITS</th>
+          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STRUCTURIZR WORKSPACES</th>
+        </tr>
+      </thead>
+      <tbody className="bg-white divide-y divide-gray-200">
+        {data?.map((user, index) => (
+          <tr key={user.user || index}> {/* Use a stable key like user.id if available */}
+            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user.user}</td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.department}</td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.c4tsApiHits}</td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.structurizrWorkspaces}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
+
+
+interface OverviewPageProps {
+  filters: FilterParams; // This prop will be injected by Layout.tsx
 }
 
-const TabPanel: React.FC<TabPanelProps> = ({ children, value, index, ...other }) => {
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`analytics-tabpanel-${index}`}
-      aria-labelledby={`analytics-tab-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
-    </div>
-  );
-};
+const Overview: React.FC<OverviewPageProps> = ({ filters }) => {
+  // Log received filters for debugging
+  useEffect(() => {
+    console.log("Overview page received filters:", filters);
+  }, [filters]);
 
-// Main Overview component
-const Overview: React.FC = () => {
-  // State for active tab
-  const [tabValue, setTabValue] = useState(0);
+  const { 
+    data: statsItems, 
+    isLoading: isLoadingStats, 
+    isError: isErrorStats, 
+    error: errorStats 
+  } = useGetOverviewStats(filters);
+
+  const { 
+    data: c4tsChartData, 
+    isLoading: isLoadingC4TSChart, 
+    isError: isErrorC4TSChart, 
+    error: errorC4TSChart 
+  } = useGetOverviewC4TSChartData(filters);
+
+  const { 
+    data: structurizrChartData, 
+    isLoading: isLoadingStructurizrChart, 
+    isError: isErrorStructurizrChart, 
+    error: errorStructurizrChart 
+  } = useGetOverviewStructurizrChartData(filters);
   
-  // State for filters
-  const [timeRange, setTimeRange] = useState<TimeRange>('lastMonth');
-  const [structurizrEonId, setStructurizrEonId] = useState<number | undefined>(undefined);
-  const [c4Owner, setC4Owner] = useState<string | undefined>(undefined);
-  const [activityDays, setActivityDays] = useState(45);
-  const [newlyCreatedHours, setNewlyCreatedHours] = useState(24);
-
-  // Fetch Structurizr data
-  const structurizrData = useStructurizrDashboardData(
-    timeRange, 
-    structurizrEonId, 
-    activityDays, 
-    newlyCreatedHours
-  );
-
-  // Fetch C4 data
-  const c4Data = useC4DashboardData(timeRange, c4Owner);
-
-  // Generate unique Structurizr EON IDs for filter
-  const eonIds = React.useMemo(() => {
-    if (!structurizrData.workspaces?.length) return [];
-    return [...new Set(structurizrData.workspaces.map(w => w.eonid))]
-      .filter(Boolean)
-      .sort((a, b) => a - b);
-  }, [structurizrData.workspaces]);
-
-  // Generate unique C4 owners for filter
-  const owners = React.useMemo(() => {
-    if (!c4Data.workspaces?.length) return [];
-    return [...new Set(c4Data.workspaces.map(w => w.owner))]
-      .filter(Boolean)
-      .sort();
-  }, [c4Data.workspaces]);
-
-  // Handle tab change
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
-  };
-
-  // Handle filter changes
-  const handleTimeRangeChange = (event: SelectChangeEvent) => {
-    setTimeRange(event.target.value as TimeRange);
-  };
-
-  const handleEonIdChange = (event: SelectChangeEvent) => {
-    const value = event.target.value;
-    setStructurizrEonId(value ? Number(value) : undefined);
-  };
-
-  const handleOwnerChange = (event: SelectChangeEvent) => {
-    const value = event.target.value;
-    setC4Owner(value || undefined);
-  };
+  const { 
+    data: topUsersTableData, 
+    isLoading: isLoadingTopUsers, 
+    isError: isErrorTopUsers, 
+    error: errorTopUsers 
+  } = useGetOverviewTopUsersTable(); // Top users table might not use page-level filters
 
   return (
-    <Container maxWidth="lg">
-      <Box sx={{ py: 4 }}>
-        <Typography variant="h4" gutterBottom>
-          Analytics Dashboard
-        </Typography>
+    <div className="space-y-6">
+      {/* Stats Cards Section */}
+      <section aria-labelledby="stats-title">
+        <h2 id="stats-title" className="sr-only">Statistics Overview</h2> {/* For accessibility */}
+        {isLoadingStats && <div className="p-4 bg-white rounded-lg shadow text-center text-gray-500">Loading statistics...</div>}
+        {isErrorStats && <div className="p-4 bg-red-100 text-red-700 rounded-lg shadow">Error loading statistics: {errorStats?.message}</div>}
+        {statsItems && statsItems.length > 0 && <StatsCard items={statsItems} />}
+        {statsItems && statsItems.length === 0 && !isLoadingStats && !isErrorStats && (
+          <div className="p-4 bg-white rounded-lg shadow text-center text-gray-500">No statistics data available for the selected filters.</div>
+        )}
+      </section>
+
+      {/* Analytics charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* C4TS Analytics Chart Section */}
+        <section aria-labelledby="c4ts-analytics-title" className="bg-white rounded-lg shadow p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 id="c4ts-analytics-title" className="text-lg font-medium text-gray-900">C4TS Analytics</h2>
+            <a href="/c4ts" className="text-primary-500 text-sm font-medium hover:text-primary-600">
+              View Details →
+            </a>
+          </div>
+          {isLoadingC4TSChart && <div className="h-64 flex items-center justify-center text-gray-500">Loading C4TS chart data...</div>}
+          {isErrorC4TSChart && <div className="h-64 flex items-center justify-center text-red-500">Error loading C4TS chart: {errorC4TSChart?.message}</div>}
+          {c4tsChartData && c4tsChartData.length > 0 && <C4TSChartPlaceholder data={c4tsChartData} />}
+          {!isLoadingC4TSChart && !isErrorC4TSChart && (!c4tsChartData || c4tsChartData.length === 0) && (
+            <div className="h-64 flex items-center justify-center text-gray-500">No C4TS chart data available for the selected filters.</div>
+          )}
+          {/* Static details below chart - consider making these dynamic too if needed */}
+          <div className="mt-4 flex justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Most Used Endpoint</p>
+              <p className="font-medium">/translate</p> {/* Placeholder */}
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Top User</p>
+              <p className="font-medium">saakaray</p> {/* Placeholder */}
+            </div>
+          </div>
+        </section>
         
-        {/* Filters common to both tabs */}
-        <Paper sx={{ mb: 4, p: 3 }}>
-          <Typography variant="h6" gutterBottom>Filters</Typography>
-          <Grid container spacing={3}>
-            <Grid item xs={12} md={6}>
-              <FormControl fullWidth>
-                <InputLabel id="timerange-label">Time Range</InputLabel>
-                <Select
-                  labelId="timerange-label"
-                  value={timeRange}
-                  label="Time Range"
-                  onChange={handleTimeRangeChange}
-                >
-                  <MenuItem value="lastWeek">Last 7 Days</MenuItem>
-                  <MenuItem value="lastMonth">Last 30 Days</MenuItem>
-                  <MenuItem value="last3Months">Last 3 Months</MenuItem>
-                  <MenuItem value="lastYear">Last Year</MenuItem>
-                  <MenuItem value="last2Years">All Time</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-          </Grid>
-        </Paper>
-        
-        {/* Tabs for switching between Structurizr and C4 analytics */}
-        <Paper sx={{ mb: 4 }}>
-          <Tabs 
-            value={tabValue} 
-            onChange={handleTabChange}
-            aria-label="analytics tabs"
-          >
-            <Tab label="Structurizr Analytics" id="analytics-tab-0" />
-            <Tab label="C4 Model Analytics" id="analytics-tab-1" />
-          </Tabs>
-          
-          {/* Tab panel for Structurizr analytics */}
-          <TabPanel value={tabValue} index={0}>
-            {structurizrData.error && (
-              <Alert severity="error" sx={{ mb: 3 }}>
-                Error loading Structurizr data: {structurizrData.error instanceof Error 
-                  ? structurizrData.error.message 
-                  : 'Unknown error'}
-              </Alert>
-            )}
-            
-            {/* Structurizr-specific filters */}
-            <Box sx={{ mb: 3 }}>
-              <Grid container spacing={3}>
-                <Grid item xs={12} md={6}>
-                  <FormControl fullWidth>
-                    <InputLabel id="eonid-label">EON ID</InputLabel>
-                    <Select
-                      labelId="eonid-label"
-                      value={structurizrEonId?.toString() || ''}
-                      label="EON ID"
-                      onChange={handleEonIdChange}
-                    >
-                      <MenuItem value="">All EON IDs</MenuItem>
-                      {eonIds.map((id) => (
-                        <MenuItem key={id} value={id.toString()}>
-                          {id}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
-              </Grid>
-            </Box>
-            
-            {/* Structurizr stats cards */}
-            <StatsCard
-              items={[
-                {
-                  title: "Total Workspaces",
-                  value: structurizrData.workspaceCount,
-                  isLoading: structurizrData.isLoading.count
-                },
-                {
-                  title: "Newly Created",
-                  value: structurizrData.newlyCreatedCount,
-                  isLoading: structurizrData.isLoading.newlyCreated,
-                  configValue: newlyCreatedHours,
-                  configLabel: "hours",
-                  onConfigChange: setNewlyCreatedHours
-                },
-                {
-                  title: "Active Workspaces",
-                  value: structurizrData.activeCount,
-                  isLoading: structurizrData.isLoading.active,
-                  configValue: activityDays,
-                  configLabel: "days",
-                  onConfigChange: setActivityDays
-                }
-              ]}
-            />
-            
-            {/* Structurizr chart */}
-            <WorkspaceChart
-              title="Workspace Creation Over Time"
-              data={structurizrData.analyticsData}
-              isLoading={structurizrData.isLoading.analytics}
-              isFetching={structurizrData.isFetching.analytics}
-            />
-            
-            {/* Structurizr recent workspaces table */}
-            <WorkspaceTable
-              title="Recently Created Workspaces"
-              workspaces={structurizrData.recentWorkspaces}
-              isLoading={structurizrData.isLoading.recent}
-              type="structurizr"
-            />
-          </TabPanel>
-          
-          {/* Tab panel for C4 analytics */}
-          <TabPanel value={tabValue} index={1}>
-            {c4Data.error && (
-              <Alert severity="error" sx={{ mb: 3 }}>
-                Error loading C4 data: {c4Data.error instanceof Error 
-                  ? c4Data.error.message 
-                  : 'Unknown error'}
-              </Alert>
-            )}
-            
-            {/* C4-specific filters */}
-            <Box sx={{ mb: 3 }}>
-              <Grid container spacing={3}>
-                <Grid item xs={12} md={6}>
-                  <FormControl fullWidth>
-                    <InputLabel id="owner-label">Owner</InputLabel>
-                    <Select
-                      labelId="owner-label"
-                      value={c4Owner || ''}
-                      label="Owner"
-                      onChange={handleOwnerChange}
-                    >
-                      <MenuItem value="">All Owners</MenuItem>
-                      {owners.map((owner) => (
-                        <MenuItem key={owner} value={owner}>
-                          {owner}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
-              </Grid>
-            </Box>
-            
-            {/* C4 stats card */}
-            <StatsCard
-              items={[
-                {
-                  title: "Total C4 Workspaces",
-                  value: c4Data.workspaceCount,
-                  isLoading: c4Data.isLoading.count
-                }
-              ]}
-            />
-            
-            {/* C4 chart */}
-            <WorkspaceChart
-              title="C4 Model Creation Over Time"
-              data={c4Data.analyticsData}
-              isLoading={c4Data.isLoading.analytics}
-              isFetching={c4Data.isFetching.analytics}
-            />
-            
-            {/* C4 most viewed workspaces table */}
-            <WorkspaceTable
-              title="Most Viewed C4 Models"
-              workspaces={c4Data.mostViewedWorkspaces}
-              isLoading={c4Data.isLoading.mostViewed}
-              type="c4"
-            />
-            
-            {/* C4 recent workspaces table */}
-            <WorkspaceTable
-              title="Recently Created C4 Models"
-              workspaces={c4Data.recentWorkspaces}
-              isLoading={c4Data.isLoading.recent}
-              type="c4"
-            />
-          </TabPanel>
-        </Paper>
-      </Box>
-    </Container>
+        {/* Structurizr Analytics Chart Section */}
+        <section aria-labelledby="structurizr-analytics-title" className="bg-white rounded-lg shadow p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 id="structurizr-analytics-title" className="text-lg font-medium text-gray-900">Structurizr Analytics</h2>
+            <a href="/structurizr" className="text-primary-500 text-sm font-medium hover:text-primary-600">
+              View Details →
+            </a>
+          </div>
+          {isLoadingStructurizrChart && <div className="h-64 flex items-center justify-center text-gray-500">Loading Structurizr chart data...</div>}
+          {isErrorStructurizrChart && <div className="h-64 flex items-center justify-center text-red-500">Error loading Structurizr chart: {errorStructurizrChart?.message}</div>}
+          {structurizrChartData && structurizrChartData.length > 0 && <StructurizrChartPlaceholder data={structurizrChartData} />}
+          {!isLoadingStructurizrChart && !isErrorStructurizrChart && (!structurizrChartData || structurizrChartData.length === 0) && (
+            <div className="h-64 flex items-center justify-center text-gray-500">No Structurizr chart data available for the selected filters.</div>
+          )}
+          {/* Static details below chart - consider making these dynamic too if needed */}
+          <div className="mt-4 flex justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Active Workspaces</p>
+              <p className="font-medium">36</p> {/* Placeholder */}
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Top User</p>
+              <p className="font-medium">browjose</p> {/* Placeholder */}
+            </div>
+          </div>
+        </section>
+      </div>
+      
+      {/* Users Table Section */}
+      <section aria-labelledby="top-users-title" className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+          <h2 id="top-users-title" className="text-lg font-medium text-gray-900">Top Users Across All Systems</h2>
+          <button className="text-primary-500 text-sm font-medium hover:text-primary-600">
+            See All
+          </button>
+        </div>
+        {isLoadingTopUsers && <div className="p-4 text-center text-gray-500">Loading top users data...</div>}
+        {isErrorTopUsers && <div className="p-4 text-center text-red-500">Error loading top users: {errorTopUsers?.message}</div>}
+        {topUsersTableData && topUsersTableData.length > 0 && <UsersTablePlaceholder data={topUsersTableData} />}
+        {!isLoadingTopUsers && !isErrorTopUsers && (!topUsersTableDatar || topUsersTableData.length === 0) && (
+          <div className="p-4 text-center text-gray-500">No top users data available.</div>
+        )}
+      </section>
+    </div>
   );
 };
 
