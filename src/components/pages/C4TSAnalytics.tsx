@@ -1,7 +1,12 @@
 // src/pages/C4TSAnalytics.tsx
-import React, { useMemo } from 'react'; // Removed useState
+import React, { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useOutletContext } from 'react-router-dom';
+
+import SingleLineMetricChart from '../../components/charts/SingleLineMetricChart';
+import HorizontalBarChart from '../../components/charts/HorizontalBarChart';
+import TableComponent, { ColumnDef } from '../../components/common/TableComponent';
+
 import {
   fetchC4TSApiHitsOverTime,
   fetchC4TSTopEndpoints,
@@ -10,61 +15,7 @@ import {
 import { DataPoint, CategoricalChartData } from '../../types/analytics';
 import { ApiEndpointData, ActiveFilters } from '../../types/common';
 
-// Helper to format numbers (can be moved to a utils file)
-const formatNumber = (num: number): string => num.toLocaleString();
-
-// --- Placeholder Components (Simplified for this context) ---
-// These would be your actual chart components.
-// They no longer manage their own filter dropdowns for timeframe etc.
-const LineChartPlaceholder: React.FC<{ title: string; data?: DataPoint[]; isLoading?: boolean; error?: Error | null; peakInfo?: string; currentFilters?: ActiveFilters }> =
- ({ title, data, isLoading, error, peakInfo, currentFilters }) => (
-  <div className="bg-white rounded-lg shadow p-6">
-    <div className="flex justify-between items-center mb-4">
-      <h2 className="text-lg font-medium text-gray-900">{title}</h2>
-      {/* Display current timeframe from global filters if needed */}
-      {currentFilters && <span className="text-sm text-gray-500">Timeframe: {currentFilters.timeframe}</span>}
-    </div>
-    {isLoading && <p className="text-gray-500">Loading chart data...</p>}
-    {error && <p className="text-red-500">Error: {error.message}</p>}
-    {!isLoading && !error && data && (
-      <div className="h-72 border border-dashed border-gray-300 rounded-md bg-gray-50 flex items-center justify-center p-4 relative">
-        <pre className="text-xs overflow-auto">Line Chart Data Loaded. Points: {data.length}</pre>
-        {peakInfo && (
-            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-full bg-primary-600 text-white text-xs px-2 py-1 rounded shadow-lg whitespace-nowrap z-10"
-                 style={{ marginLeft: '25%' }}>
-                {peakInfo.split('\n').map((line, i) => <div key={i}>{line}</div>)}
-            </div>
-        )}
-      </div>
-    )}
-    {!isLoading && !error && !data && <p>No data available for the chart.</p>}
-  </div>
-);
-
-const BarChartPlaceholder: React.FC<{ title: string; increase?: string; data?: CategoricalChartData[]; isLoading?: boolean; error?: Error | null; }> =
- ({ title, increase, data, isLoading, error }) => (
-  <div className="bg-white rounded-lg shadow p-6">
-    <div className="flex justify-between items-center mb-4">
-      <h2 className="text-lg font-medium text-gray-900">{title}</h2>
-      {increase && (
-        <span className="text-sm font-medium text-green-600 flex items-center">
-          <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z" clipRule="evenodd"></path></svg>
-          {increase}
-        </span>
-      )}
-    </div>
-    {isLoading && <p className="text-gray-500">Loading chart data...</p>}
-    {error && <p className="text-red-500">Error: {error.message}</p>}
-    {!isLoading && !error && data && (
-      <div className="h-72 border border-dashed border-gray-300 rounded-md bg-gray-50 flex items-center justify-center p-4">
-        <pre className="text-xs overflow-auto">Bar Chart Data Loaded. Bars: {data.length}</pre>
-      </div>
-    )}
-     {!isLoading && !error && !data && <p>No data available for the chart.</p>}
-  </div>
-);
-// --- End Placeholder Components ---
-
+const formatNumber = (num: number | undefined): string => (num || 0).toLocaleString();
 
 interface PageContextType {
   activeFilters: ActiveFilters;
@@ -72,100 +23,117 @@ interface PageContextType {
 
 const C4TSAnalytics: React.FC = () => {
   const outletContext = useOutletContext<PageContextType | null>();
-
-  // Ensure activeFilters is available before using it
-  const activeFilters = useMemo(() => {
-    if (outletContext) {
-      return outletContext.activeFilters;
-    }
-    // Return default filters or handle the case where context is not yet available
-    // This might happen briefly on initial load or if context is not set up correctly.
-    // For robustness, you might want a loading state or ensure Layout provides defaults.
-    return {
-      timeframe: 'all-time',
-      department: 'ALL_DEPARTMENTS',
-      region: 'ALL_REGIONS',
-    } as ActiveFilters; // Fallback, ideally context is always there
-  }, [outletContext]);
-
+  const activeFilters = useMemo(() => outletContext ? outletContext.activeFilters : { timeframe: 'all-time', department: 'ALL_DEPARTMENTS', region: 'ALL_REGIONS'} as ActiveFilters, [outletContext]);
 
   // 1. Fetch API Hits Over Time (Line Chart)
-  const {
-    data: apiHitsData,
-    isLoading: isLoadingApiHits,
-    error: errorApiHits,
-  } = useQuery<DataPoint[], Error>({
-    queryKey: ['c4tsApiHits', activeFilters.timeframe, activeFilters.department, activeFilters.region],
+  const { data: apiHitsData, isLoading: isLoadingApiHits, error: errorApiHits } = useQuery<DataPoint[], Error>({
+    queryKey: ['c4tsApiHits', activeFilters], // Simplified key if all filters apply
     queryFn: () => fetchC4TSApiHitsOverTime(activeFilters),
-    enabled: !!outletContext, // Only run query if context (and thus filters) is available
+    enabled: !!outletContext,
   });
 
-  const peakApiHitInfo = useMemo(() => {
-    if (apiHitsData && apiHitsData.length > 0) {
-        const peakPoint = apiHitsData.find(p => p.date === 'Mar 23'); // Example for mock
-        if (peakPoint) {
-            return `${peakPoint.value} Hits\nMarch, 2025`;
-        }
+  const c4tsApiHitsPeakInfoProvider = (point: DataPoint): string | null => {
+    if (point.date === 'Mar 23' && apiHitsData?.find(p => p.date === 'Mar 23' && p.value === point.value)) { // Example peak from wireframe
+      return `${point.value} Hits\nMarch, 2025`;
     }
-    return undefined;
-  }, [apiHitsData]);
+    return null;
+  };
 
   // 2. Fetch Top Users (Bar Chart)
-  const {
-    data: topUsersData,
-    isLoading: isLoadingTopUsers,
-    error: errorTopUsers,
-  } = useQuery<CategoricalChartData[], Error>({
-    queryKey: ['c4tsTopUsers', activeFilters.department, activeFilters.region], // Assuming department/region filters apply
+  const { data: topUsersChartAPIData, isLoading: isLoadingTopUsers, error: errorTopUsers } = useQuery<CategoricalChartData[], Error>({
+    queryKey: ['c4tsTopUsersChart', activeFilters.department, activeFilters.region], // Typically not filtered by timeframe
     queryFn: () => fetchC4TSTopUsersChartData(activeFilters),
     enabled: !!outletContext,
   });
-  // Note: The "3.5% Increase" is still hardcoded here. Needs dynamic data source.
+  // TODO: The "3.5% Increase" needs its own data source or calculation
 
   // 3. Fetch API Hits (URL) Table
-  const {
-    data: topEndpointsData,
-    isLoading: isLoadingTopEndpoints,
-    error: errorTopEndpoints,
-  } = useQuery<ApiEndpointData[], Error>({
-    queryKey: ['c4tsTopEndpoints', activeFilters.department, activeFilters.region], // Assuming department/region filters apply
+  const { data: topEndpointsData, isLoading: isLoadingTopEndpoints, error: errorTopEndpoints } = useQuery<ApiEndpointData[], Error>({
+    queryKey: ['c4tsTopEndpointsTable', activeFilters.department, activeFilters.region, activeFilters.timeframe], // All filters might apply here
     queryFn: () => fetchC4TSTopEndpoints(activeFilters),
     enabled: !!outletContext,
   });
 
-  if (!outletContext) {
-    // Optional: Render a loading state or null if context is not yet available
-    // This depends on how quickly Layout provides the context.
-    return <div className="p-6">Loading filters...</div>;
-  }
+  const apiHitsUrlColumns: ColumnDef<ApiEndpointData>[] = useMemo(() => [
+    {
+      header: 'API URL', // Screenshot says "USER" as title, but data is URL
+      accessorKey: 'url',
+      tdClassName: 'font-medium text-gray-900',
+    },
+    {
+      header: 'Number of Hits',
+      accessorKey: 'hits',
+      cellRenderer: (value) => formatNumber(value as number),
+      tdClassName: 'text-right',
+      thClassName: 'text-right',
+    },
+  ], []);
+
+
+  if (!outletContext) return <div className="p-6 text-center">Loading filters...</div>;
 
   return (
     <div className="space-y-6">
-      {/* API Hits Line Chart */}
-      <LineChartPlaceholder
-        title="API Hits"
-        data={apiHitsData}
-        isLoading={isLoadingApiHits}
-        error={errorApiHits}
-        peakInfo={peakApiHitInfo}
-        currentFilters={activeFilters} // Pass current filters for display if needed
-      />
-
-      {/* Top Users Bar Chart */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div> {/* Empty div for layout adjustment as per screenshot */} </div>
-        <BarChartPlaceholder
-            title="TOP USERS"
-            increase="3.5% Increase" // Hardcoded
-            data={topUsersData}
-            isLoading={isLoadingTopUsers}
-            error={errorTopUsers}
-        />
+      {/* API Hits Line Chart Card */}
+      <div className="bg-white rounded-lg shadow">
+        <div className="p-6 flex justify-between items-center">
+          <h2 className="text-lg font-medium text-gray-900">API Hits</h2>
+          {/* Global timeframe filter is in PageHeader. Here we display it. */}
+          <span className="text-sm text-gray-500">Timeframe: {activeFilters.timeframe}</span>
+        </div>
+        <div className="px-6 pb-6">
+          {isLoadingApiHits && <p className="text-center h-72 flex items-center justify-center text-gray-500">Loading API Hits chart...</p>}
+          {errorApiHits && <p className="text-center h-72 flex items-center justify-center text-red-500">Error: {errorApiHits.message}</p>}
+          {apiHitsData && (
+            <SingleLineMetricChart
+              data={apiHitsData}
+              lineName="API Hits"
+              lineColor="#2563eb" // Blue
+              yAxisLabel={null} // No Y-axis label as per wireframe for this specific chart
+              aspect={3} // Adjust aspect ratio
+              peakInfoProvider={c4tsApiHitsPeakInfoProvider}
+            />
+          )}
+          {!isLoadingApiHits && !errorApiHits && (!apiHitsData || apiHitsData.length === 0) && (
+            <p className="text-center h-72 flex items-center justify-center text-gray-500">No data available for API Hits chart.</p>
+          )}
+        </div>
       </div>
 
-      {/* API Hits (URL) Table */}
+      {/* Top Users Bar Chart Card */}
+      {/* The wireframe shows this pushed to the right, assuming global filters take up left space */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>{/* This empty div helps push the content to the right on larger screens if PageHeader filters are on left */}</div>
+        <div className="bg-white rounded-lg shadow">
+          <div className="p-6 flex justify-between items-center">
+            <h2 className="text-lg font-medium text-gray-900">TOP USERS</h2>
+            <span className="text-sm font-medium text-green-600 flex items-center">
+              <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z" clipRule="evenodd"></path></svg>
+              3.5% Increase {/* Still hardcoded */}
+            </span>
+          </div>
+          <div className="px-6 pb-6">
+            {isLoadingTopUsers && <p className="text-center h-72 flex items-center justify-center text-gray-500">Loading Top Users chart...</p>}
+            {errorTopUsers && <p className="text-center h-72 flex items-center justify-center text-red-500">Error: {errorTopUsers.message}</p>}
+            {topUsersChartAPIData && (
+              <HorizontalBarChart
+                data={topUsersChartAPIData}
+                barColor="#10b981" // Green
+                aspect={1.5} // Adjust aspect
+                // xAxisLabel="Number of Hits"
+              />
+            )}
+            {!isLoadingTopUsers && !errorTopUsers && (!topUsersChartAPIData || topUsersChartAPIData.length === 0) && (
+                <p className="text-center h-72 flex items-center justify-center text-gray-500">No data available for Top Users chart.</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+
+      {/* API Hits (URL) Table Card */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="p-6 flex justify-between items-center">
+        <div className="px-6 py-4 flex justify-between items-center border-b border-gray-200">
           <h2 className="text-lg font-medium text-gray-900">API Hits (URL)</h2>
           <button
             type="button"
@@ -174,31 +142,13 @@ const C4TSAnalytics: React.FC = () => {
             See All →
           </button>
         </div>
-        {isLoadingTopEndpoints && <p className="p-6 text-gray-500">Loading API hits by URL...</p>}
-        {errorTopEndpoints && <p className="p-6 text-red-500">Error: {errorTopEndpoints.message}</p>}
-        {topEndpointsData && topEndpointsData.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">API URL</th>
-                  <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Number of Hits</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {topEndpointsData.map((endpoint) => (
-                  <tr key={endpoint.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{endpoint.url}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">{formatNumber(endpoint.hits)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {topEndpointsData && topEndpointsData.length === 0 && !isLoadingTopEndpoints &&(
-          <p className="p-6 text-gray-500">No API hit data available.</p>
-        )}
+        <TableComponent
+          columns={apiHitsUrlColumns}
+          data={topEndpointsData || []}
+          isLoading={isLoadingTopEndpoints}
+          error={errorTopEndpoints}
+          noDataMessage="No API hit data by URL to display."
+        />
       </div>
     </div>
   );
