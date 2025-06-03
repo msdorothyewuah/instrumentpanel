@@ -1,32 +1,42 @@
 // src/components/layout/Layout.tsx
-import React, { ReactNode, useState, useMemo, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { ReactNode, useState } from 'react';
+import { useLocation, Outlet } from 'react-router-dom'; // Using Outlet for nested routes
 import Sidebar from './Sidebar';
-import Header from './Header';
-import PageHeader from './PageHeader';
+import Header from './Header'; // Your main app header (with Download button)
+import PageHeader from './PageHeader'; // The header with title and filters
 import Footer from './Footer';
-import { FilterParams } from '../../services/apiService'; // Ensure this path is correct
+import { ActiveFilters, TimeframeId, DepartmentId, RegionId } from '../../types/common';
+import {
+  DEFAULT_TIMEFRAME_ID,
+  DEFAULT_DEPARTMENT_ID,
+  DEFAULT_REGION_ID
+} from '../../constants/Filters';
 
 interface LayoutProps {
-  children: ReactNode;
+  // children prop is implicitly handled by <Outlet /> if App.tsx uses Layout as a wrapper for routes
 }
 
-const Layout = ({ children }: LayoutProps) => {
+const Layout: React.FC<LayoutProps> = () => {
   const location = useLocation();
 
-  const [timeframe, setTimeframe] = useState<string>('all-time');
-  const [department, setDepartment] = useState<string>('All');
-  const [region, setRegion] = useState<string>('All');
+  const [activeFilters, setActiveFilters] = useState<ActiveFilters>({
+    timeframe: DEFAULT_TIMEFRAME_ID,
+    department: DEFAULT_DEPARTMENT_ID,
+    region: DEFAULT_REGION_ID,
+  });
 
-  // Create a stable filters object only when filter values change
-  const currentFilters: FilterParams = useMemo(() => ({
-    timeframe,
-    department,
-    region,
-  }), [timeframe, department, region]);
+  const handleTimeframeChange = (timeframeId: TimeframeId) => {
+    setActiveFilters(prev => ({ ...prev, timeframe: timeframeId }));
+  };
+  const handleDepartmentChange = (departmentId: DepartmentId) => {
+    setActiveFilters(prev => ({ ...prev, department: departmentId }));
+  };
+  const handleRegionChange = (regionId: RegionId) => {
+    setActiveFilters(prev => ({ ...prev, region: regionId }));
+  };
 
-  const getTitle = (): string => {
-    switch(location.pathname) {
+  const getPageTitle = (): string => {
+    switch (location.pathname) {
       case '/':
         return 'Analytics Overview';
       case '/c4ts':
@@ -34,46 +44,30 @@ const Layout = ({ children }: LayoutProps) => {
       case '/structurizr':
         return 'Structurizr Analytics';
       default:
-        return 'EA Analytics';
+        return 'EA Analytics'; // Fallback title
     }
   };
 
-  // Log when filters change for debugging
-  useEffect(() => {
-    console.log("Filters updated in Layout:", currentFilters);
-  }, [currentFilters]);
-
   return (
-    <div className="app-container flex h-screen bg-gray-100">
+    <div className="flex h-screen bg-gray-100">
       <Sidebar />
-      
-      <div className="main-content flex-1 flex flex-col overflow-hidden">
-        <Header />
-        
-        <main className="flex-1 overflow-y-auto bg-gray-50">
-          <div className="p-6">
-            <PageHeader 
-              title={getTitle()}
-              currentTimeframe={timeframe}
-              setCurrentTimeframe={setTimeframe}
-              currentDepartment={department}
-              setCurrentDepartment={setDepartment}
-              currentRegion={region}
-              setCurrentRegion={setRegion}
-            />
-            {/* Pass current filters to children (page components) */}
-            {React.Children.map(children, child => {
-              if (React.isValidElement(child)) {
-                // TypeScript needs a bit of help here to know children can accept 'filters'
-                // This assumes child components are designed to accept 'filters' or will ignore it.
-                return React.cloneElement(child, { filters: currentFilters } as { filters: FilterParams }); 
-              }
-              return child;
-            })}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <Header /> {/* This is the top-most header, e.g., with Download button */}
+        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50 p-6">
+          <PageHeader
+            title={getPageTitle()}
+            activeFilters={activeFilters}
+            onTimeframeChange={handleTimeframeChange}
+            onDepartmentChange={handleDepartmentChange}
+            onRegionChange={handleRegionChange}
+          />
+          <div className="mt-6">
+            {/* Pass activeFilters to the child route's component */}
+            {/* This requires child components to accept an activeFilters prop */}
+            <Outlet context={{ activeFilters }} />
           </div>
         </main>
-        
-        <Footer />
+        <Footer lastUpdated="Today, at 10:00 AM" refreshInterval={4} />
       </div>
     </div>
   );

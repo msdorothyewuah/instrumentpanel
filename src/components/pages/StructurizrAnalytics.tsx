@@ -1,191 +1,241 @@
 // src/pages/StructurizrAnalytics.tsx
-import React, { useEffect } from 'react';
-import StatsCard from '../components/dashboard/StatsCard'; // Adjust path
-// Assuming WorkspaceChart is your Recharts component, or a similar one
-import WorkspaceChart from '../components/dashboard/WorkspaceChart'; // Adjust path
+import React, { useMemo } from 'react'; // Removed useState
+import { useQuery } from '@tanstack/react-query';
+import { useOutletContext } from 'react-router-dom';
 import {
-  useGetStructurizrPageStats,
-  useGetStructurizrWorkspaceCreationChartData,
-  useGetStructurizrAccessMethodsData,
-  useGetStructurizrTopUsersChartData,
-  // useGetRawStructurizrWorkspaces, // Uncomment if you need the raw list for something specific
-} from '../hooks/structurizrQueries'; // Adjust path
-import { FilterParams, StructurizrAccessMethod } from '../services/apiService'; // Adjust path
+  fetchStructurizrWorkspacesTrend,
+  fetchStructurizrAccessMethods,
+  fetchStructurizrTopUsersChartData,
+  WorkspaceTrendDataPoint,
+  AccessMethodData,
+} from '../../services/apiService';
+import { CategoricalChartData } from '../../types/analytics';
+import { ActiveFilters } from '../../types/common';
 
-// Placeholder components if you don't have them yet
-const AccessMethodsChartPlaceholder: React.FC<{ data: any }> = ({ data }) => ( // Assuming data might be for a doughnut/pie
-  <div className="h-48 flex items-center justify-center border border-dashed border-gray-300 rounded-md bg-gray-50 mb-4">
-    <p className="text-gray-500">Access Methods Chart (Data points: {data?.chartData?.length || 0})</p>
+// Helper to format numbers
+const formatNumber = (num: number): string => num.toLocaleString();
+
+// --- Placeholder Components (Simplified) ---
+// These would be your actual chart components.
+// They no longer manage their own filter dropdowns.
+
+const MultiLineChartPlaceholder: React.FC<{ title: string; data?: WorkspaceTrendDataPoint[]; isLoading?: boolean; error?: Error | null; legendItems?: {name: string, color: string}[]; peakInfo?: string; currentFilters?: ActiveFilters }> =
+ ({ title, data, isLoading, error, legendItems, peakInfo, currentFilters }) => (
+  <div className="bg-white rounded-lg shadow p-6">
+    <div className="flex justify-between items-center mb-4">
+      <h2 className="text-lg font-medium text-gray-900">{title}</h2>
+      {currentFilters && <span className="text-sm text-gray-500">Timeframe: {currentFilters.timeframe}</span>}
+    </div>
+    {isLoading && <p className="text-gray-500">Loading chart data...</p>}
+    {error && <p className="text-red-500">Error: {error.message}</p>}
+    {!isLoading && !error && data && (
+      <>
+        <div className="h-72 border border-dashed border-gray-300 rounded-md bg-gray-50 flex items-center justify-center p-4 relative">
+          <pre className="text-xs overflow-auto">Multi-Line Chart. Points: {data.length}</pre>
+          {peakInfo && (
+            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-full bg-primary-600 text-white text-xs px-2 py-1 rounded shadow-lg whitespace-nowrap z-10"
+                 style={{ marginLeft: '25%' }}>
+                {peakInfo.split('\n').map((line, i) => <div key={i}>{line}</div>)}
+            </div>
+           )}
+        </div>
+        {legendItems && (
+          <div className="mt-4 flex justify-center space-x-4">
+            {legendItems.map(item => (
+              <div key={item.name} className="flex items-center">
+                <span className={`h-3 w-3 rounded-full mr-2`} style={{ backgroundColor: item.color }}></span>
+                <span className="text-sm text-gray-600">{item.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </>
+    )}
+    {!isLoading && !error && !data && <p>No data available for the chart.</p>}
   </div>
 );
 
-const TopUsersBarChartPlaceholder: React.FC<{ data: any[] }> = ({ data }) => (
-  <div className="h-64 flex items-center justify-center border border-dashed border-gray-300 rounded-md bg-gray-50">
-    <p className="text-gray-500">Top Users Bar Chart (Data points: {data?.length || 0})</p>
+const DonutChartPlaceholder: React.FC<{ data?: AccessMethodData[]; isLoading?: boolean; error?: Error | null; }> =
+ ({ data, isLoading, error }) => (
+  <div className="h-full flex flex-col items-center justify-center">
+    {isLoading && <p className="text-gray-500">Loading donut chart...</p>}
+    {error && <p className="text-red-500">Error: {error.message}</p>}
+    {!isLoading && !error && data && (
+      <div className="w-48 h-48 border-8 border-dashed border-gray-300 rounded-full bg-gray-50 flex items-center justify-center p-4">
+        <span className="text-xs text-gray-400">Donut</span>
+      </div>
+    )}
   </div>
 );
 
+const BarChartPlaceholder: React.FC<{ title: string; increase?: string; data?: CategoricalChartData[]; isLoading?: boolean; error?: Error | null; }> =
+ ({ title, increase, data, isLoading, error }) => (
+  <div className="bg-white rounded-lg shadow p-6">
+    <div className="flex justify-between items-center mb-4">
+      <h2 className="text-lg font-medium text-gray-900">{title}</h2>
+      {increase && (
+        <span className="text-sm font-medium text-green-600 flex items-center">
+          <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z" clipRule="evenodd"></path></svg>
+          {increase}
+        </span>
+      )}
+    </div>
+    {isLoading && <p className="text-gray-500">Loading chart data...</p>}
+    {error && <p className="text-red-500">Error: {error.message}</p>}
+    {!isLoading && !error && data && (
+      <div className="h-72 border border-dashed border-gray-300 rounded-md bg-gray-50 flex items-center justify-center p-4">
+        <pre className="text-xs overflow-auto">Bar Chart. Bars: {data.length}</pre>
+      </div>
+    )}
+    {!isLoading && !error && !data && <p>No data available for the chart.</p>}
+  </div>
+);
+// --- End Placeholder Components ---
 
-interface StructurizrAnalyticsPageProps {
-  filters: FilterParams; // Received from Layout.tsx
+interface PageContextType {
+  activeFilters: ActiveFilters;
 }
 
-const StructurizrAnalytics: React.FC<StructurizrAnalyticsPageProps> = ({ filters }) => {
-  useEffect(() => {
-    console.log("StructurizrAnalytics page received filters:", filters);
-  }, [filters]);
+const StructurizrAnalytics: React.FC = () => {
+  const outletContext = useOutletContext<PageContextType | null>();
 
-  const { 
-    data: pageStats, 
-    isLoading: isLoadingPageStats, 
-    isError: isErrorPageStats, 
-    error: errorPageStats 
-  } = useGetStructurizrPageStats(filters);
+  const activeFilters = useMemo(() => {
+    if (outletContext) {
+      return outletContext.activeFilters;
+    }
+    return {
+      timeframe: 'all-time',
+      department: 'ALL_DEPARTMENTS',
+      region: 'ALL_REGIONS',
+    } as ActiveFilters; // Fallback
+  }, [outletContext]);
 
-  const { 
-    data: workspaceCreationChartData, 
-    isLoading: isLoadingWsCreationChart, 
-    isError: isErrorWsCreationChart, 
-    error: errorWsCreationChart 
-  } = useGetStructurizrWorkspaceCreationChartData(filters);
+  // 1. Fetch Structurizr Workspaces Trend (Multi-Line Chart)
+  const {
+    data: workspacesTrendData,
+    isLoading: isLoadingWorkspacesTrend,
+    error: errorWorkspacesTrend,
+  } = useQuery<WorkspaceTrendDataPoint[], Error>({
+    queryKey: ['structurizrWorkspacesTrend', activeFilters.timeframe, activeFilters.department, activeFilters.region],
+    queryFn: () => fetchStructurizrWorkspacesTrend(activeFilters),
+    enabled: !!outletContext,
+  });
 
-  const { 
-    data: accessMethodsData, 
-    isLoading: isLoadingAccessMethods, 
-    isError: isErrorAccessMethods, 
-    error: errorAccessMethods 
-  } = useGetStructurizrAccessMethodsData(); // Assuming this doesn't take page-level filters
+  const peakWorkspaceInfo = useMemo(() => {
+    if (workspacesTrendData) {
+        const mar23Data = workspacesTrendData.find(d => d.date === 'Mar 23');
+        if (mar23Data) {
+            return `March, 2025\nActive: 30\nCreated: 5\nDeleted: 2`; // From screenshot tooltip
+        }
+    }
+    return undefined;
+  }, [workspacesTrendData]);
 
-  const { 
-    data: topUsersChartData, 
-    isLoading: isLoadingTopUsersChart, 
-    isError: isErrorTopUsersChart, 
-    error: errorTopUsersChart 
-  } = useGetStructurizrTopUsersChartData(); // Assuming this doesn't take page-level filters
+  // 2. Fetch Workspace Access Methods (Donut Chart & Table)
+  // This data typically isn't filtered by timeframe, but might be by department/region
+  const {
+    data: accessMethodsData,
+    isLoading: isLoadingAccessMethods,
+    error: errorAccessMethods,
+  } = useQuery<AccessMethodData[], Error>({
+    queryKey: ['structurizrAccessMethods', activeFilters.department, activeFilters.region], // Filter by dept/region
+    queryFn: () => fetchStructurizrAccessMethods(activeFilters), // Pass activeFilters
+    enabled: !!outletContext,
+  });
 
-  // Example for raw data if needed:
-  // const { data: rawWorkspaces, isLoading: isLoadingRaw, isError: isErrorRaw } = useGetRawStructurizrWorkspaces(filters);
+  // 3. Fetch Top Users (Bar Chart)
+  const {
+    data: topUsersData,
+    isLoading: isLoadingTopUsers,
+    error: errorTopUsers,
+  } = useQuery<CategoricalChartData[], Error>({
+    queryKey: ['structurizrTopUsers', activeFilters.department, activeFilters.region], // Filter by dept/region
+    queryFn: () => fetchStructurizrTopUsersChartData(activeFilters), // Pass activeFilters
+    enabled: !!outletContext,
+  });
+  // Note: The "3.5% Increase" is still hardcoded.
+
+  const workspaceLegend = [
+    { name: 'Active', color: '#3b82f6' },
+    { name: 'Created', color: '#22c55e' },
+    { name: 'Deleted', color: '#ef4444' },
+  ];
+
+  if (!outletContext) {
+    return <div className="p-6">Loading filters...</div>;
+  }
 
   return (
     <div className="space-y-6">
-      {/* Stats Card Section */}
-      <section aria-labelledby="structurizr-stats-title">
-        <h2 id="structurizr-stats-title" className="sr-only">Structurizr Statistics</h2>
-        {isLoadingPageStats && <div className="p-4 bg-white rounded-lg shadow text-center text-gray-500">Loading statistics...</div>}
-        {isErrorPageStats && <div className="p-4 bg-red-100 text-red-700 rounded-lg shadow">Error loading statistics: {errorPageStats?.message}</div>}
-        {pageStats && pageStats.length > 0 && <StatsCard items={pageStats} />}
-        {!isLoadingPageStats && !isErrorPageStats && (!pageStats || pageStats.length === 0) && (
-            <div className="p-4 bg-white rounded-lg shadow text-center text-gray-500">No statistics data available for selected filters.</div>
-        )}
-      </section>
+      {/* Structurizr Workspaces Multi-Line Chart */}
+      <MultiLineChartPlaceholder
+        title="Structurizr Workspaces"
+        data={workspacesTrendData}
+        isLoading={isLoadingWorkspacesTrend}
+        error={errorWorkspacesTrend}
+        legendItems={workspaceLegend}
+        peakInfo={peakWorkspaceInfo}
+        currentFilters={activeFilters}
+      />
 
-      {/* Workspaces Chart Section */}
-      <section aria-labelledby="ws-creation-chart-title" className="bg-white rounded-lg shadow p-6">
-        <div className="flex justify-between items-center mb-6"> {/* Increased mb from 4 to 6 */}
-          <h2 id="ws-creation-chart-title" className="text-xl font-medium text-gray-900">Structurizr Workspaces</h2>
-          {/* Filter specific to this chart, if different from page filters, would be managed here */}
-          {/* For now, assumes page filters apply or it uses its own default timeframe */}
-          <div className="flex items-center">
-            <button className="text-sm font-medium text-primary-500 bg-primary-50 px-3 py-1 rounded-md">
-              This month {/* This button might become dynamic or reflect current filter */}
-            </button>
+      {/* How workspaces are being accessed & Top Users */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Access Methods Donut Chart & Table */}
+        <div className="lg:col-span-2 bg-white rounded-lg shadow p-6">
+          <h2 className="text-lg font-medium text-gray-900 mb-4">How workspaces are being accessed</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+            <div className="md:col-span-1">
+              <DonutChartPlaceholder
+                data={accessMethodsData}
+                isLoading={isLoadingAccessMethods}
+                error={errorAccessMethods}
+              />
+            </div>
+            <div className="md:col-span-2">
+              {isLoadingAccessMethods && <p className="text-gray-500">Loading access methods...</p>}
+              {errorAccessMethods && <p className="text-red-500">Error: {errorAccessMethods.message}</p>}
+              {accessMethodsData && accessMethodsData.length > 0 && (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full">
+                    <thead>
+                      <tr>
+                        <th className="py-2 pr-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Page Name</th>
+                        <th className="py-2 px-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Users</th>
+                        <th className="py-2 pl-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rate</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white">
+                      {accessMethodsData.map((method) => (
+                        <tr key={method.id}>
+                          <td className="py-2 pr-2 whitespace-nowrap text-sm text-gray-900 flex items-center">
+                            <span className={`h-2 w-2 rounded-full mr-2`} style={{ backgroundColor: method.color || '#ccc' }}></span>
+                            {method.name}
+                          </td>
+                          <td className="py-2 px-2 whitespace-nowrap text-sm text-gray-500">{formatNumber(method.users)}</td>
+                          <td className="py-2 pl-2 whitespace-nowrap text-sm text-gray-500">{method.rate.toFixed(2)}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {accessMethodsData && accessMethodsData.length === 0 && !isLoadingAccessMethods &&(
+                  <p className="text-gray-500">No access method data available.</p>
+              )}
+            </div>
           </div>
         </div>
-        
-        {isLoadingWsCreationChart && <div className="h-64 flex items-center justify-center text-gray-500">Loading workspace creation chart...</div>}
-        {isErrorWsCreationChart && <div className="h-64 flex items-center justify-center text-red-500">Error: {errorWsCreationChart?.message}</div>}
-        {workspaceCreationChartData && workspaceCreationChartData.length > 0 && (
-          // Your WorkspaceChart component should be adapted to take StructurizrActivityChartDataPoint[]
-          // And internally map 'active', 'created', 'deleted' to different lines
-          <WorkspaceChart data={workspaceCreationChartData} />
-        )}
-        {!isLoadingWsCreationChart && !isErrorWsCreationChart && (!workspaceCreationChartData || workspaceCreationChartData.length === 0) && (
-             <div className="h-64 flex items-center justify-center text-gray-500">No workspace creation data for selected filters.</div>
-        )}
-        
-        {/* Legend (can be part of WorkspaceChart or dynamic based on its data keys) */}
-        <div className="flex mt-4">
-          <div className="flex items-center mr-4">
-            <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-            <span className="text-sm text-gray-600">Active</span>
-          </div>
-          <div className="flex items-center mr-4">
-            <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
-            <span className="text-sm text-gray-600">Created</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
-            <span className="text-sm text-gray-600">Deleted</span>
-          </div>
+
+        {/* Top Users Bar Chart */}
+        <div className="lg:col-span-1">
+          <BarChartPlaceholder
+            title="TOP USERS"
+            increase="3.5% Increase" // Hardcoded
+            data={topUsersData}
+            isLoading={isLoadingTopUsers}
+            error={errorTopUsers}
+          />
         </div>
-      </section>
-      
-      {/* Access methods and Top users */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Access methods chart/table Section */}
-        <section aria-labelledby="access-methods-title" className="bg-white rounded-lg shadow p-6">
-          <h2 id="access-methods-title" className="text-xl font-medium text-gray-900 mb-6">How workspaces are being accessed</h2>
-          
-          {isLoadingAccessMethods && <div className="text-center py-4 text-gray-500">Loading access methods...</div>}
-          {isErrorAccessMethods && <div className="text-center py-4 text-red-500">Error: {errorAccessMethods?.message}</div>}
-          {accessMethodsData && accessMethodsData.tableData && (
-            <>
-              {/* <AccessMethodsChartPlaceholder data={accessMethodsData.chartData} /> */} {/* If you have chart data */}
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PAGE NAME</th>
-                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">TOTAL USERS</th>
-                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">RATE</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {accessMethodsData.tableData.map((item: StructurizrAccessMethod, index: number) => (
-                    <tr key={index}>
-                      <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900 flex items-center">
-                        {/* Dynamic dot color could be added here based on item.pageName */}
-                        <div className={`w-3 h-3 ${
-                            item.pageName === 'API' ? 'bg-blue-500' : 
-                            item.pageName === 'CLI' ? 'bg-orange-500' : 'bg-red-500'
-                          } rounded-full mr-2`}></div>
-                        {item.pageName}
-                      </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{item.totalUsers}</td>
-                      <td className="px-4 py-2 whitespace-nowrap text-sm text-green-500">{item.rate}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </>
-          )}
-          {!isLoadingAccessMethods && !isErrorAccessMethods && !accessMethodsData?.tableData && (
-            <div className="text-center py-4 text-gray-500">No access methods data available.</div>
-          )}
-        </section>
-        
-        {/* Top users chart Section */}
-        <section aria-labelledby="structurizr-top-users-title" className="bg-white rounded-lg shadow p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 id="structurizr-top-users-title" className="text-xl font-medium text-gray-900">TOP USERS</h2>
-            <span className="text-green-500 flex items-center text-sm"> {/* This trend could also come from data */}
-              <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clipRule="evenodd" />
-              </svg>
-              3.5% Increase
-            </span>
-          </div>
-          
-          {isLoadingTopUsersChart && <div className="h-64 flex items-center justify-center text-gray-500">Loading top users chart...</div>}
-          {isErrorTopUsersChart && <div className="h-64 flex items-center justify-center text-red-500">Error: {errorTopUsersChart?.message}</div>}
-          {topUsersChartData && topUsersChartData.length > 0 && (
-            <TopUsersBarChartPlaceholder data={topUsersChartData} />
-            // Replace with your actual bar chart component for top users
-            // e.g., <UserBarChart data={topUsersChartData} dataKey="workspaces" />
-          )}
-           {!isLoadingTopUsersChart && !isErrorTopUsersChart && (!topUsersChartData || topUsersChartData.length === 0) && (
-             <div className="h-64 flex items-center justify-center text-gray-500">No top users data available.</div>
-           )}
-        </section>
       </div>
     </div>
   );

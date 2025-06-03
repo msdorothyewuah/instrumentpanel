@@ -1,177 +1,239 @@
 // src/pages/Overview.tsx
-import React, { useEffect } from 'react'; // Added useEffect for logging
-import StatsCard from '../components/dashboard/StatsCard'; // Adjust path
+import React, { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useOutletContext } from 'react-router-dom';
+import StatsCard from '../../components/dashboard/StatsCard';
 import {
-  useGetOverviewStats,
-  useGetOverviewC4TSChartData,
-  useGetOverviewStructurizrChartData,
-  useGetOverviewTopUsersTable,
-} from '../hooks/overviewQueries'; // Adjust path
-import { FilterParams } from '../services/apiService'; // Adjust path
+  fetchOverviewSummaryStats,
+  fetchC4TSOverviewChartData,
+  fetchStructurizrOverviewChartData,
+  fetchTopUsersAcrossSystems,
+} from '../../services/apiService';
+import { OverviewSummaryStats, DataPoint } from '../../types/analytics';
+import { UserData, StatsCardDisplayData, ActiveFilters } from '../../types/common';
 
-// Placeholder components for charts and tables
-// You will replace these with your actual charting/table components
-const C4TSChartPlaceholder: React.FC<{ data: any[] }> = ({ data }) => (
-  <div className="h-64 border border-dashed border-gray-300 rounded-md bg-gray-50 flex items-center justify-center">
-    <p className="text-gray-500">C4TS Chart (Data points: {data?.length || 0})</p>
+// Helper to format numbers
+const formatNumber = (num: number): string => num.toLocaleString();
+
+// --- Placeholder Chart Component (Simplified) ---
+const ChartPlaceholder: React.FC<{ title: string; data?: any; isLoading?: boolean; error?: Error | null; children?: React.ReactNode; viewDetailsLink?: string; currentFilters?: ActiveFilters }> =
+ ({ title, isLoading, error, children, viewDetailsLink, currentFilters }) => (
+  <div className="bg-white rounded-lg shadow p-6">
+    <div className="flex justify-between items-center mb-4">
+      <div>
+        <h2 className="text-lg font-medium text-gray-900">{title}</h2>
+        {currentFilters && <span className="text-xs text-gray-400">Filters: {currentFilters.timeframe}, {currentFilters.department}, {currentFilters.region}</span>}
+      </div>
+      {viewDetailsLink && (
+        <a href={viewDetailsLink} className="text-sm font-medium text-primary-600 hover:text-primary-500">
+          View Details →
+        </a>
+      )}
+    </div>
+    {isLoading && <p className="text-gray-500">Loading chart data...</p>}
+    {error && <p className="text-red-500">Error loading chart: {error.message}</p>}
+    {!isLoading && !error && (
+      children ? children : <div className="h-64 flex items-center justify-center border border-dashed border-gray-300 rounded-md bg-gray-50">
+        <p className="text-gray-500">Chart: Data to be displayed.</p>
+      </div>
+    )}
   </div>
 );
+// --- End Placeholder ---
 
-const StructurizrChartPlaceholder: React.FC<{ data: any[] }> = ({ data }) => (
-  <div className="h-64 border border-dashed border-gray-300 rounded-md bg-gray-50 flex items-center justify-center">
-    <p className="text-gray-500">Structurizr Chart (Data points: {data?.length || 0})</p>
-  </div>
-);
-
-const UsersTablePlaceholder: React.FC<{ data: any[] }> = ({ data }) => (
-  <div className="overflow-x-auto">
-    <table className="min-w-full divide-y divide-gray-200">
-      <thead className="bg-gray-50">
-        <tr>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">USER</th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DEPARTMENT</th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">C4TS API HITS</th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STRUCTURIZR WORKSPACES</th>
-        </tr>
-      </thead>
-      <tbody className="bg-white divide-y divide-gray-200">
-        {data?.map((user, index) => (
-          <tr key={user.user || index}> {/* Use a stable key like user.id if available */}
-            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user.user}</td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.department}</td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.c4tsApiHits}</td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.structurizrWorkspaces}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-);
-
-
-interface OverviewPageProps {
-  filters: FilterParams; // This prop will be injected by Layout.tsx
+interface PageContextType {
+  activeFilters: ActiveFilters;
 }
 
-const Overview: React.FC<OverviewPageProps> = ({ filters }) => {
-  // Log received filters for debugging
-  useEffect(() => {
-    console.log("Overview page received filters:", filters);
-  }, [filters]);
+const Overview: React.FC = () => {
+  const outletContext = useOutletContext<PageContextType | null>();
 
-  const { 
-    data: statsItems, 
-    isLoading: isLoadingStats, 
-    isError: isErrorStats, 
-    error: errorStats 
-  } = useGetOverviewStats(filters);
+  const activeFilters = useMemo(() => {
+    if (outletContext) {
+      return outletContext.activeFilters;
+    }
+    return { // Fallback defaults
+      timeframe: 'all-time',
+      department: 'ALL_DEPARTMENTS',
+      region: 'ALL_REGIONS',
+    } as ActiveFilters;
+  }, [outletContext]);
 
-  const { 
-    data: c4tsChartData, 
-    isLoading: isLoadingC4TSChart, 
-    isError: isErrorC4TSChart, 
-    error: errorC4TSChart 
-  } = useGetOverviewC4TSChartData(filters);
+  // 1. Fetch Overview Summary Stats
+  const {
+    data: overviewStatsAPIData, // Renamed to avoid conflict with transformed data
+    isLoading: isLoadingOverviewStats,
+    error: errorOverviewStats,
+  } = useQuery<OverviewSummaryStats, Error>({
+    queryKey: ['overviewSummaryStats', activeFilters.timeframe, activeFilters.department, activeFilters.region],
+    queryFn: () => fetchOverviewSummaryStats(activeFilters), // Pass activeFilters
+    enabled: !!outletContext,
+  });
 
-  const { 
-    data: structurizrChartData, 
-    isLoading: isLoadingStructurizrChart, 
-    isError: isErrorStructurizrChart, 
-    error: errorStructurizrChart 
-  } = useGetOverviewStructurizrChartData(filters);
-  
-  const { 
-    data: topUsersTableData, 
-    isLoading: isLoadingTopUsers, 
-    isError: isErrorTopUsers, 
-    error: errorTopUsers 
-  } = useGetOverviewTopUsersTable(); // Top users table might not use page-level filters
+  // Transform overviewStatsAPIData for the StatsCard component
+  const statsForDisplay: StatsCardDisplayData[] = useMemo(() => {
+    if (!overviewStatsAPIData) return [];
+    return [
+      {
+        title: 'Total API Hits (C4TS)',
+        value: formatNumber(overviewStatsAPIData.totalApiHits.value),
+        trend: overviewStatsAPIData.totalApiHits.trend,
+      },
+      {
+        title: 'Active Workspace (Structurizr)',
+        value: formatNumber(overviewStatsAPIData.activeWorkspaces.value),
+        trend: overviewStatsAPIData.activeWorkspaces.trend,
+      },
+      {
+        title: 'Total Users',
+        value: formatNumber(overviewStatsAPIData.totalUsers.value),
+        trend: overviewStatsAPIData.totalUsers.trend,
+      },
+      {
+        title: 'Total Departments',
+        value: formatNumber(overviewStatsAPIData.totalDepartments.value),
+        trend: overviewStatsAPIData.totalDepartments.trend,
+      },
+    ];
+  }, [overviewStatsAPIData]);
+
+  // 2. Fetch C4TS Overview Chart Data
+  const {
+    data: c4tsChartData,
+    isLoading: isLoadingC4TSChart,
+    error: errorC4TSChart,
+  } = useQuery<{ seriesData: DataPoint[]; mostUsedEndpoint?: string; topUser?: string; }, Error>({
+    queryKey: ['c4tsOverviewChart', activeFilters.timeframe, activeFilters.department, activeFilters.region],
+    queryFn: () => fetchC4TSOverviewChartData(activeFilters), // Pass activeFilters
+    enabled: !!outletContext,
+  });
+
+  // 3. Fetch Structurizr Overview Chart Data
+  const {
+    data: structurizrChartData,
+    isLoading: isLoadingStructurizrChart,
+    error: errorStructurizrChart,
+  } = useQuery<{ seriesData: DataPoint[]; topUser?: string; }, Error>({
+    queryKey: ['structurizrOverviewChart', activeFilters.timeframe, activeFilters.department, activeFilters.region],
+    queryFn: () => fetchStructurizrOverviewChartData(activeFilters), // Pass activeFilters
+    enabled: !!outletContext,
+  });
+
+  // 4. Fetch Top Users Across All Systems
+  const {
+    data: topUsersData,
+    isLoading: isLoadingTopUsers,
+    error: errorTopUsers,
+  } = useQuery<UserData[], Error>({
+    queryKey: ['topUsersAcrossSystems', activeFilters.timeframe, activeFilters.department, activeFilters.region],
+    queryFn: () => fetchTopUsersAcrossSystems(activeFilters), // Pass activeFilters
+    enabled: !!outletContext,
+  });
+
+
+  if (!outletContext) {
+    return <div className="p-6">Loading filters...</div>;
+  }
+  // Main loading state for critical stats
+  if (isLoadingOverviewStats) {
+    return <div className="p-6">Loading dashboard overview...</div>;
+  }
+  if (errorOverviewStats) {
+    return <div className="p-6 text-red-500">Error loading overview stats: {errorOverviewStats.message}</div>;
+  }
 
   return (
     <div className="space-y-6">
-      {/* Stats Cards Section */}
-      <section aria-labelledby="stats-title">
-        <h2 id="stats-title" className="sr-only">Statistics Overview</h2> {/* For accessibility */}
-        {isLoadingStats && <div className="p-4 bg-white rounded-lg shadow text-center text-gray-500">Loading statistics...</div>}
-        {isErrorStats && <div className="p-4 bg-red-100 text-red-700 rounded-lg shadow">Error loading statistics: {errorStats?.message}</div>}
-        {statsItems && statsItems.length > 0 && <StatsCard items={statsItems} />}
-        {statsItems && statsItems.length === 0 && !isLoadingStats && !isErrorStats && (
-          <div className="p-4 bg-white rounded-lg shadow text-center text-gray-500">No statistics data available for the selected filters.</div>
-        )}
-      </section>
+      <StatsCard items={statsForDisplay} />
 
-      {/* Analytics charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* C4TS Analytics Chart Section */}
-        <section aria-labelledby="c4ts-analytics-title" className="bg-white rounded-lg shadow p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 id="c4ts-analytics-title" className="text-lg font-medium text-gray-900">C4TS Analytics</h2>
-            <a href="/c4ts" className="text-primary-500 text-sm font-medium hover:text-primary-600">
-              View Details →
-            </a>
-          </div>
-          {isLoadingC4TSChart && <div className="h-64 flex items-center justify-center text-gray-500">Loading C4TS chart data...</div>}
-          {isErrorC4TSChart && <div className="h-64 flex items-center justify-center text-red-500">Error loading C4TS chart: {errorC4TSChart?.message}</div>}
-          {c4tsChartData && c4tsChartData.length > 0 && <C4TSChartPlaceholder data={c4tsChartData} />}
-          {!isLoadingC4TSChart && !isErrorC4TSChart && (!c4tsChartData || c4tsChartData.length === 0) && (
-            <div className="h-64 flex items-center justify-center text-gray-500">No C4TS chart data available for the selected filters.</div>
+        <ChartPlaceholder
+          title="C4TS Analytics"
+          isLoading={isLoadingC4TSChart}
+          error={errorC4TSChart}
+          viewDetailsLink="/c4ts"
+          currentFilters={activeFilters}
+        >
+          {c4tsChartData && (
+            <>
+              <div className="h-64 border border-dashed border-gray-300 rounded-md bg-gray-50 flex items-center justify-center p-4">
+                <pre className="text-xs overflow-auto">
+                  C4TS Chart. Series: {c4tsChartData.seriesData.length}.
+                  Endpoint: {c4tsChartData.mostUsedEndpoint}. User: {c4tsChartData.topUser}
+                </pre>
+              </div>
+              <div className="mt-4 flex justify-between text-sm text-gray-500">
+                <p>Most Used Endpoint: <span className="font-medium text-gray-700">{c4tsChartData.mostUsedEndpoint || 'N/A'}</span></p>
+                <p>Top User: <span className="font-medium text-gray-700">{c4tsChartData.topUser || 'N/A'}</span></p>
+              </div>
+            </>
           )}
-          {/* Static details below chart - consider making these dynamic too if needed */}
-          <div className="mt-4 flex justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Most Used Endpoint</p>
-              <p className="font-medium">/translate</p> {/* Placeholder */}
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Top User</p>
-              <p className="font-medium">saakaray</p> {/* Placeholder */}
-            </div>
-          </div>
-        </section>
-        
-        {/* Structurizr Analytics Chart Section */}
-        <section aria-labelledby="structurizr-analytics-title" className="bg-white rounded-lg shadow p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 id="structurizr-analytics-title" className="text-lg font-medium text-gray-900">Structurizr Analytics</h2>
-            <a href="/structurizr" className="text-primary-500 text-sm font-medium hover:text-primary-600">
-              View Details →
-            </a>
-          </div>
-          {isLoadingStructurizrChart && <div className="h-64 flex items-center justify-center text-gray-500">Loading Structurizr chart data...</div>}
-          {isErrorStructurizrChart && <div className="h-64 flex items-center justify-center text-red-500">Error loading Structurizr chart: {errorStructurizrChart?.message}</div>}
-          {structurizrChartData && structurizrChartData.length > 0 && <StructurizrChartPlaceholder data={structurizrChartData} />}
-          {!isLoadingStructurizrChart && !isErrorStructurizrChart && (!structurizrChartData || structurizrChartData.length === 0) && (
-            <div className="h-64 flex items-center justify-center text-gray-500">No Structurizr chart data available for the selected filters.</div>
+        </ChartPlaceholder>
+
+        <ChartPlaceholder
+          title="Structurizr Analytics"
+          isLoading={isLoadingStructurizrChart}
+          error={errorStructurizrChart}
+          viewDetailsLink="/structurizr"
+          currentFilters={activeFilters}
+        >
+          {structurizrChartData && (
+             <>
+              <div className="h-64 border border-dashed border-gray-300 rounded-md bg-gray-50 flex items-center justify-center p-4">
+                 <pre className="text-xs overflow-auto">
+                    Structurizr Chart. Series: {structurizrChartData.seriesData.length}.
+                    User: {structurizrChartData.topUser}
+                  </pre>
+              </div>
+              <div className="mt-4 flex justify-end text-sm text-gray-500">
+                 <p>Top User: <span className="font-medium text-gray-700">{structurizrChartData.topUser || 'N/A'}</span></p>
+              </div>
+            </>
           )}
-          {/* Static details below chart - consider making these dynamic too if needed */}
-          <div className="mt-4 flex justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Active Workspaces</p>
-              <p className="font-medium">36</p> {/* Placeholder */}
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Top User</p>
-              <p className="font-medium">browjose</p> {/* Placeholder */}
-            </div>
-          </div>
-        </section>
+        </ChartPlaceholder>
       </div>
-      
-      {/* Users Table Section */}
-      <section aria-labelledby="top-users-title" className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h2 id="top-users-title" className="text-lg font-medium text-gray-900">Top Users Across All Systems</h2>
-          <button className="text-primary-500 text-sm font-medium hover:text-primary-600">
-            See All
+
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="p-6 flex justify-between items-center">
+          <h2 className="text-lg font-medium text-gray-900">Top Users Across All Systems</h2>
+          <button
+            type="button"
+            className="text-sm font-medium text-primary-600 hover:text-primary-500"
+            // onClick={() => navigate('/all-users-details')} // Example navigation
+          >
+            See All →
           </button>
         </div>
-        {isLoadingTopUsers && <div className="p-4 text-center text-gray-500">Loading top users data...</div>}
-        {isErrorTopUsers && <div className="p-4 text-center text-red-500">Error loading top users: {errorTopUsers?.message}</div>}
-        {topUsersTableData && topUsersTableData.length > 0 && <UsersTablePlaceholder data={topUsersTableData} />}
-        {!isLoadingTopUsers && !isErrorTopUsers && (!topUsersTableDatar || topUsersTableData.length === 0) && (
-          <div className="p-4 text-center text-gray-500">No top users data available.</div>
+        {isLoadingTopUsers && <p className="p-6 text-gray-500">Loading top users...</p>}
+        {errorTopUsers && <p className="p-6 text-red-500">Error loading top users: {errorTopUsers.message}</p>}
+        {topUsersData && topUsersData.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">C4TS API Hits</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Structurizr Workspaces</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {topUsersData.map((user) => (
+                  <tr key={user.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user.name}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.department}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatNumber(user.c4tsApiHits || 0)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatNumber(user.structurizrWorkspaces || 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
-      </section>
+        {topUsersData && topUsersData.length === 0 && !isLoadingTopUsers && (
+          <p className="p-6 text-gray-500">No top user data available.</p>
+        )}
+      </div>
     </div>
   );
 };
